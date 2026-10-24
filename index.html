@@ -1185,11 +1185,17 @@ const monitorCams=[], monitorRTs=[];
 let monitorFrame=0;
 function updateControlRoomScreens(){
   const batch=2;    // se refrescan 2 de los 8 monitores por frame (ciclo completo ≈4 frames)
+  // mientras xr.enabled=true, renderer.render() sustituye SIEMPRE la cámara que le pasamos
+  // por la del propio casco (xr.getCamera). Hay que apagarlo durante estas pasadas, igual
+  // que hace THREE.CubeCamera cuando renderiza a textura dentro de una sesión XR.
+  const xrWasEnabled=renderer.xr.enabled;
+  renderer.xr.enabled=false;
   for(let k=0;k<batch;k++){
     const i=(monitorFrame+k)%monitorCams.length;
     renderer.setRenderTarget(monitorRTs[i]);
     renderer.render(scene,monitorCams[i]);
   }
+  renderer.xr.enabled=xrWasEnabled;
   monitorFrame=(monitorFrame+batch)%monitorCams.length;
   renderer.setRenderTarget(null);
 }
