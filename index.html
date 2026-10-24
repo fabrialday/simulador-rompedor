@@ -1136,7 +1136,12 @@ applyJoys();
    ===================================================== */
 let hintText='';
 const xrPrev={};
-const VR_POS=[{p:[4.5,0,10.3],n:'zona segura'},{p:[4.5,0,6.8],n:'cercana'}];
+const VR_POS=[
+  {p:[4.5,0,10.3],n:'vista general'},
+  {p:[4.5,0,6.8],n:'junto al pozo'},
+  {p:[7.0,0,6.8],n:'lado martillo'},
+  {p:[2.5,0,6.8],n:'lado giro'}
+];
 let vrPosIdx=0;
 const vrCanvas=document.createElement('canvas'); vrCanvas.width=640; vrCanvas.height=360;
 const vrCtx=vrCanvas.getContext('2d');
