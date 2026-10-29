@@ -171,7 +171,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:#f2f3f
   <div id="controls">
     <div class="pad">
       <div class="joy" id="joyL"><div class="knob"></div></div>
-      <small>Giro ↔ · Pluma ↕</small>
+      <small>Giro ↔ · Brazo ↕</small>
     </div>
     <div id="mid">
       <button class="pbtn" id="hammer">GOLPEAR</button>
@@ -182,7 +182,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:#f2f3f
     </div>
     <div class="pad">
       <div class="joy" id="joyR"><div class="knob"></div></div>
-      <small>Martillo ↔ · Brazo ↕</small>
+      <small>Martillo ↔ · Pluma ↕</small>
     </div>
   </div>
 
@@ -857,7 +857,9 @@ function readInput(){
     }
   }catch(e){}
   ax.phi=-clamp(sl,-1,1);          // derecha = giro horario (φ decrece)
-  ax.t2=clamp(bo,-1,1); ax.t3=clamp(st,-1,1); ax.t4=clamp(to,-1,1); ax.hammer=ham;
+  // Mapeo de mandos (pedido del cliente): bastón izquierdo ↕ = Brazo, bastón derecho ↕ = Pluma.
+  // 'bo' = eje vertical izquierdo (W/S), 'st' = eje vertical derecho (↑/↓).
+  ax.t2=clamp(st,-1,1); ax.t3=clamp(bo,-1,1); ax.t4=clamp(to,-1,1); ax.hammer=ham;
   return ax;
 }
 function locked(){ return $('overlay').style.display==='flex' && !renderer.xr.isPresenting; }
@@ -1062,8 +1064,8 @@ const HELP = '<h2>Simulador de rompedor de rocas</h2>'+
  '<h3>Controles</h3><table>'+
  '<tr><th></th><th>Táctil / gamepad</th><th>Teclado</th></tr>'+
  '<tr><td>Giro</td><td>Izq. ← →</td><td>A / D</td></tr>'+
- '<tr><td>Pluma</td><td>Izq. ↑ ↓</td><td>W / S</td></tr>'+
- '<tr><td>Brazo</td><td>Der. ↑ ↓</td><td>↑ / ↓</td></tr>'+
+ '<tr><td>Brazo</td><td>Izq. ↑ ↓</td><td>W / S</td></tr>'+
+ '<tr><td>Pluma</td><td>Der. ↑ ↓</td><td>↑ / ↓</td></tr>'+
  '<tr><td>Martillo</td><td>Der. ← →</td><td>← / →</td></tr>'+
  '<tr><td>Golpear</td><td>Botón / RT</td><td>Espacio</td></tr>'+
  '<tr><td>START</td><td>Botón / Start</td><td>Enter</td></tr>'+
@@ -1071,7 +1073,7 @@ const HELP = '<h2>Simulador de rompedor de rocas</h2>'+
  '<tr><td>Vista</td><td>Botón Vista</td><td>C (cambia) · 1 a 5 (directa)</td></tr></table>'+
  '<p class="small">El mapeo de ejes es provisorio: hay que igualarlo al del mando real.</p>'+
  '<h3>Modos</h3><p><b>Formación:</b> con ayudas, sin límite de tiempo, con falla simulable. <b>Evaluación:</b> sin ayudas, 150 s, mismas rocas y misma falla para todos.</p>'+
- '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y pluma, derecho = martillo y brazo. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo.</p>'+
+ '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo.</p>'+
  '<button class="cta" data-act="close">Continuar</button>';
 function evalIntro(){
   showOverlay('<h2>Prueba estándar</h2><p>Duración: 150 s. Las rocas son las mismas para todos los operadores. Sin ayudas visuales. A los 70 s ocurre una falla; la respuesta correcta es la parada de emergencia.</p>'+
