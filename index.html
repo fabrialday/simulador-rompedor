@@ -358,7 +358,8 @@ stickG.add(pin(CFG.L2,0,0.5));
 const toolG = new THREE.Group(); toolG.position.set(CFG.L2,0,0); stickG.add(toolG);
 toolG.add(box(1.2,0.5,0.5,M.dark,0.6,0,0));
 toolG.add(box(0.9,0.14,0.54,M.yellow,0.35,0.0,0));
-toolG.add(box(0.5,0.3,0.5,M.yellowDk,0.15,0.0,0));
+// ancho 0.52 y centro 0.16: evita caras coplanares (z-fighting / "titileo") con el cuerpo oscuro (0.5) y la franja amarilla (0.54)
+toolG.add(box(0.5,0.3,0.52,M.yellowDk,0.16,0.0,0));
 const collar=cyl(0.16,0.10,M.steel); collar.rotation.z=-Math.PI/2; collar.position.set(1.22,0,0); toolG.add(collar);
 const chisel = new THREE.Group(); chisel.position.set(1.2,0,0); toolG.add(chisel);
 const chMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.1,0.7,12),M.steel);
