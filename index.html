@@ -1275,7 +1275,7 @@ const HELP ='<h2>Simulador de rompedor de rocas</h2>'+
  '<tr><td>Vista</td><td>Botón Vista</td><td>C (cambia) · 1 a 5 (directa)</td></tr></table>'+
  '<p class="small">El mapeo de ejes es provisorio: hay que igualarlo al del mando real.</p>'+
  '<h3>Modos</h3><p><b>Formación:</b> con ayudas, sin límite de tiempo, con falla simulable. <b>Evaluación:</b> sin ayudas, 150 s, mismas rocas y misma falla para todos.</p>'+
- '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo. Clic del stick izquierdo: sonido sí/no. Clic del stick derecho: pantalla de inicio. En la sala de mando hay dos joysticks sobre el escritorio: acerca la mano a la perilla amarilla, mantén el agarre y muévela (izquierdo: giro y brazo; derecho: martillo y pluma); al soltar vuelven al centro. Con la mano en un joystick, el agarre no activa la emergencia (usa B).</p>'+
+ '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo. Clic del stick izquierdo: sonido sí/no. Clic del stick derecho: pantalla de inicio. En la sala de mando hay dos joysticks sobre el escritorio: acerca la mano a la perilla amarilla, mantén el agarre y muévela (izquierdo: giro y brazo; derecho: martillo y pluma); al soltar vuelven al centro. En la fila delantera del escritorio hay dos botones: toca START (verde) o STOP (rojo) con la mano. Con la mano en un joystick, el agarre no activa la emergencia (usa B).</p>'+
  '<button class="cta" data-act="close">Continuar</button>';
 function evalIntro(){
   showOverlay('<h2>Prueba estándar</h2><p>Duración: 150 s. Las rocas son las mismas para todos los operadores. Sin ayudas visuales. A los 70 s ocurre una falla; la respuesta correcta es la parada de emergencia.</p>'+
@@ -1365,7 +1365,7 @@ vrPanel.visible=false; rig.add(vrPanel);
    - en la sala de mando: sobre el escritorio, inclinado hacia el operador y bajo la pared de monitores.
    Ajustar p (x,y,z en m), rx (inclinación), ry (giro) y s (escala) si hace falta. */
 const PANEL_FIELD={p:[-0.62,0.95,-1.15], rx:-0.45, ry:0.38, s:0.5};
-const PANEL_ROOM ={p:[0,0.80,-0.80],    rx:-0.90, ry:0,    s:0.5};
+const PANEL_ROOM ={p:[0,0.92,-1.02],    rx:-1.15, ry:0,    s:0.5};
 function placeVRPanel(){
   const k=(vrPosIdx===ROOM_IDX)?PANEL_ROOM:PANEL_FIELD;
   vrPanel.position.set(k.p[0],k.p[1],k.p[2]); vrPanel.rotation.set(k.rx,k.ry,0,'YXZ'); vrPanel.scale.set(k.s,k.s,1);
@@ -1461,14 +1461,15 @@ const monitorCams=[], monitorRTs=[];
   const M_frame=new THREE.MeshStandardMaterial({color:srgb(0x2a2f34),roughness:.5,metalness:.4});
   /* Pared: un monitor GRANDE central con la vista cenital y 7 monitores menores en una fila inferior.
      Se lee desde 2 m: el grande mide 1,52 × 0,95 m; los menores 0,40 × 0,25 m (antes 0,50 × 0,30). */
-  const BIG={w:1.52,h:0.95,y:2.02}, SM={w:0.40,h:0.25,gap:0.06,y:1.28};
+  const BIG={w:1.52,h:0.95,y:1.45}, SM={w:0.40,h:0.25};
   scene.add(box(3.4,1.95,0.08,M_frame,roomX,1.8,wallZ-0.05));          // pared de fondo
-  scene.add(box(2.2,0.06,0.85,M_frame,roomX,0.72,roomZ-0.825));        // tablero del escritorio (más hondo: caben los joysticks)
+  scene.add(box(2.2,0.06,0.95,M_frame,roomX,0.72,roomZ-0.775));        // tablero del escritorio (más hondo: caben los joysticks)
   scene.add(box(2.2,0.7,0.05,M_bezel,roomX,0.36,roomZ-1.22));          // frente del mueble
   const smallViews=[0,1,2,3,5,6,7];                                    // índices de VIEWS (el 4, cenital, va en el grande)
-  const totW=smallViews.length*SM.w+(smallViews.length-1)*SM.gap;
-  const specs=[{vi:4,x:roomX,y:BIG.y,w:BIG.w,h:BIG.h,rw:800,rh:500,fov:46,lw:0.9,ly:BIG.y+BIG.h/2+0.085}];
-  smallViews.forEach((vi,i)=>specs.push({vi,x:roomX-totW/2+SM.w/2+i*(SM.w+SM.gap),y:SM.y,w:SM.w,h:SM.h,rw:400,rh:250,fov:50,lw:SM.w,ly:SM.y-SM.h/2-0.05}));
+  // grande abajo al centro; 3 chicos en fila arriba; 2 a cada lado (columnas)
+  const smallPos=[[-0.48,2.22],[0,2.22],[0.48,2.22],[-1.08,1.72],[-1.08,1.32],[1.08,1.72],[1.08,1.32]];
+  const specs=[{vi:4,x:roomX,y:BIG.y,w:BIG.w,h:BIG.h,rw:800,rh:500,fov:46,lw:0.9,ly:BIG.y-BIG.h/2-0.07}];
+  smallViews.forEach((vi,i)=>specs.push({vi,x:roomX+smallPos[i][0],y:smallPos[i][1],w:SM.w,h:SM.h,rw:400,rh:250,fov:50,lw:SM.w,ly:smallPos[i][1]-SM.h/2-0.05}));
   function labelPlane(text,w,x,y){
     const c=document.createElement('canvas'); c.width=512; c.height=80; const g=c.getContext('2d');
     g.fillStyle='#f2b705'; g.font='bold 46px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,256,42);
@@ -1502,15 +1503,29 @@ const joySticks=[], joyOut=[{x:0,y:0},{x:0,y:0}], joyNear={left:false,right:fals
   const M_shaft=new THREE.MeshStandardMaterial({color:srgb(0x9aa1a8),roughness:.3,metalness:.8});
   const M_grip =new THREE.MeshStandardMaterial({color:srgb(0x16181a),roughness:.7,metalness:.1});
   const deskY=0.75;
-  function deskLabel(l1,l2,x,z){
-    const c=document.createElement('canvas'); c.width=512; c.height=160; const g=c.getContext('2d');
-    g.fillStyle='#f2b705'; g.font='bold 56px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
-    g.fillText(l1,256,46); g.fillText(l2,256,116);
+  function arrow(g,x1,y1,x2,y2){                       // flecha de doble punta dibujada con trazos (sin depender de la fuente)
+    const a=Math.atan2(y2-y1,x2-x1), L=22;
+    g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+    for(const [px,py,ang] of [[x2,y2,a],[x1,y1,a+Math.PI]]){
+      g.beginPath(); g.moveTo(px,py); g.lineTo(px-L*Math.cos(ang-0.5),py-L*Math.sin(ang-0.5));
+      g.lineTo(px-L*Math.cos(ang+0.5),py-L*Math.sin(ang+0.5)); g.closePath(); g.fill();
+    }
+  }
+  function deskDiagram(hName,vName,x,z){               // cruz de movimientos: ↔ y ↕ con su nombre
+    const c=document.createElement('canvas'); c.width=c.height=360; const g=c.getContext('2d');
+    g.fillStyle='rgba(10,12,14,0.55)'; g.fillRect(0,0,360,360);
+    g.strokeStyle=g.fillStyle='#f2b705'; g.lineWidth=7; g.lineCap='round';
+    arrow(g,50,180,310,180); arrow(g,180,50,180,310);
+    g.fillStyle='#ffffff'; g.font='bold 40px sans-serif'; g.textBaseline='middle';
+    g.textAlign='center'; g.fillText(hName,180,222); g.fillText(vName,180,28);
+    g.font='bold 26px sans-serif'; g.fillStyle='#c9ced6';
+    g.textAlign='left'; g.fillText('IZQ',6,150); g.textAlign='right'; g.fillText('DER',354,150);
+    g.textAlign='left'; g.fillText('ADELANTE',196,70); g.fillText('ATRÁS',196,300);
     const tx=new THREE.CanvasTexture(c); tx.encoding=THREE.sRGBEncoding;
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(0.32,0.1),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(0.27,0.27),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
     m.rotation.x=-Math.PI/2; m.position.set(x,deskY+0.004,z); scene.add(m);
   }
-  [{x:roomX-0.47,l:['GIRO: lados','BRAZO: adelante']},{x:roomX+0.47,l:['MARTILLO: lados','PLUMA: adelante']}].forEach(s=>{
+  [{x:roomX-0.30,dx:-0.34,l:['GIRO','BRAZO']},{x:roomX+0.30,dx:0.34,l:['MARTILLO','PLUMA']}].forEach(s=>{
     const z=roomZ-0.62, P=new THREE.Vector3(s.x,deskY+0.03,z);
     scene.add(box(0.24,0.03,0.26,M_plate,s.x,deskY+0.015,z));
     const lever=new THREE.Group(); lever.position.copy(P); scene.add(lever);
@@ -1519,8 +1534,27 @@ const joySticks=[], joyOut=[{x:0,y:0},{x:0,y:0}], joyNear={left:false,right:fals
     const grip=cyl(0.022,0.07,M_grip); grip.position.y=JOY.L-0.02; lever.add(grip);
     const capMat=new THREE.MeshStandardMaterial({color:srgb(0xf2b705),roughness:.4,metalness:.1,emissive:0x000000});
     const cap=new THREE.Mesh(new THREE.SphereGeometry(0.03,16,12),capMat); cap.position.y=JOY.L+0.03; cap.castShadow=true; lever.add(cap);
-    deskLabel(s.l[0],s.l[1],s.x,z-0.2);
+    deskDiagram(s.l[0],s.l[1],s.x+s.dx,z);
     joySticks.push({P,lever,cap,capMat,holder:null,tx:0,tz:0});
+  });
+})();
+/* Botones START (verde) y STOP (rojo) en la fila delantera del escritorio: se pulsan tocándolos con la mano. */
+const deskBtns=[];
+(function buildDeskButtons(){
+  const deskY=0.75, z=roomZ-0.40;
+  function label(text,x,col){
+    const c=document.createElement('canvas'); c.width=256; c.height=96; const g=c.getContext('2d');
+    g.fillStyle=col; g.font='bold 70px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,128,50);
+    const tx=new THREE.CanvasTexture(c); tx.encoding=THREE.sRGBEncoding;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(0.16,0.06),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
+    m.rotation.x=-Math.PI/2; m.position.set(x,deskY+0.004,z-0.095); scene.add(m);
+  }
+  [{k:'start',t:'START',x:roomX+0.11,col:0x1fa84a,css:'#4be07a'},{k:'stop',t:'STOP',x:roomX-0.11,col:0xd32020,css:'#ff6b6b'}].forEach(b=>{
+    scene.add(box(0.13,0.02,0.1,new THREE.MeshStandardMaterial({color:srgb(0x1b1e22),roughness:.55,metalness:.45}),b.x,deskY+0.01,z));
+    const mat=new THREE.MeshStandardMaterial({color:srgb(b.col),roughness:.4,metalness:.1,emissive:0x000000});
+    const cap=cyl(0.04,0.03,mat); cap.position.set(b.x,deskY+0.035,z); scene.add(cap);
+    label(b.t,b.x,b.css);
+    deskBtns.push({k:b.k,cap,mat,y0:deskY+0.035,P:new THREE.Vector3(b.x,deskY+0.05,z),near:{left:false,right:false}});
   });
 })();
 // manos de los controles (solo visibles en la sala de mando)
@@ -1537,6 +1571,7 @@ const vrGrips=[0,1].map(i=>{
 });
 const _jv=new THREE.Vector3(), _jk=new THREE.Vector3(); let _jt=0;
 function joyReset(){
+  for(const bt of deskBtns){ bt.near.left=bt.near.right=false; bt.cap.position.y=bt.y0; bt.mat.emissive.setHex(0); }
   for(const s of joySticks){ s.holder=null; s.tx=s.tz=0; s.lever.rotation.set(0,0,0); s.capMat.emissive.setHex(0); }
   joyOut[0].x=joyOut[0].y=joyOut[1].x=joyOut[1].y=0; joyNear.left=joyNear.right=false;
   for(const g of vrGrips) g.userData.mesh.visible=false;
@@ -1554,6 +1589,15 @@ function vrJoyStep(xs){
     const h=g.userData.hand; if(!g.userData.on||!h) continue;
     g.getWorldPosition(_jv); pos[h]=_jv.clone();
     g.userData.mesh.visible=true;
+  }
+  for(const bt of deskBtns){                               // botones del escritorio: tocar con la mano = pulsar
+    let down=false;
+    for(const h of ['left','right']){
+      const n=!!pos[h]&&pos[h].distanceTo(bt.P)<0.07;
+      if(n&&!bt.near[h]) { if(bt.k==='start') pressStart(); else pressEstop(); }
+      bt.near[h]=n; if(n) down=true;
+    }
+    bt.cap.position.y=bt.y0-(down?0.012:0); bt.mat.emissive.setHex(down?(bt.k==='start'?0x1f6b2a:0x7a1010):0);
   }
   for(const s of joySticks){
     s.cap.getWorldPosition(_jk);
