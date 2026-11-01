@@ -1023,14 +1023,19 @@ function readInput(){
       const dz=v=>Math.abs(v)<0.12?0:v;
       for(const src of xs.inputSources){
         const gp=src.gamepad; if(!gp) continue; const h=src.handedness;
+        const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed), pv=xrPrev[h]||{};
+        if(b(3)&&!pv[3]){ if(h==='left') toggleSound(); else if(h==='right') vrStartShow(); }   // clic del stick: izq. = sonido, der. = pantalla de inicio
+        if(vrStartActive){                                    // pantalla de inicio abierta: A = Formación, B = Evaluación; el resto no actúa
+          if(h==='right'){ if(b(4)&&!pv[4]) vrStartChoose('train'); else if(b(5)&&!pv[5]) vrStartChoose('eval'); }
+          xrPrev[h]={1:b(1),3:b(3),4:b(4),5:b(5)}; continue;
+        }
         const sx=gp.axes.length>=4?gp.axes[2]:gp.axes[0], sy=gp.axes.length>=4?gp.axes[3]:gp.axes[1];
         if(h==='left'){ sl+=dz(sx||0); bo+=-dz(sy||0); } else if(h==='right'){ to+=dz(sx||0); st+=-dz(sy||0); }
-        const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed), pv=xrPrev[h]||{};
         if(b(0)) ham=true;                                    // gatillo = golpear
         if(b(1)&&!pv[1]) pressEstop();                        // agarre = emergencia
         if(h==='right'){ if(b(4)&&!pv[4]) pressStart(); if(b(5)&&!pv[5]) pressEstop(); }
         if(h==='left'){ if(b(4)&&!pv[4]) cycleVRPos(); if(b(5)&&!pv[5]) setMode(mode==='train'?'eval':'train'); }
-        xrPrev[h]={1:b(1),4:b(4),5:b(5)};
+        xrPrev[h]={1:b(1),3:b(3),4:b(4),5:b(5)};
       }
     }
   }catch(e){}
@@ -1269,7 +1274,7 @@ const HELP ='<h2>Simulador de rompedor de rocas</h2>'+
  '<tr><td>Vista</td><td>Botón Vista</td><td>C (cambia) · 1 a 5 (directa)</td></tr></table>'+
  '<p class="small">El mapeo de ejes es provisorio: hay que igualarlo al del mando real.</p>'+
  '<h3>Modos</h3><p><b>Formación:</b> con ayudas, sin límite de tiempo, con falla simulable. <b>Evaluación:</b> sin ayudas, 150 s, mismas rocas y misma falla para todos.</p>'+
- '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo.</p>'+
+ '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo. Clic del stick izquierdo: sonido sí/no. Clic del stick derecho: pantalla de inicio.</p>'+
  '<button class="cta" data-act="close">Continuar</button>';
 function evalIntro(){
   showOverlay('<h2>Prueba estándar</h2><p>Duración: 150 s. Las rocas son las mismas para todos los operadores. Sin ayudas visuales. A los 70 s ocurre una falla; la respuesta correcta es la parada de emergencia.</p>'+
@@ -1314,7 +1319,12 @@ function setMode(m){
 document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click',()=>{initAudio();setMode(b.dataset.m);}));
 function cycleCam(){ setMainView((camIdx+1)%VIEWS.length); }
 $('camBtn').addEventListener('click',cycleCam);
-$('sndBtn').addEventListener('click',()=>{ muted=!muted; $('sndBtn').textContent='Sonido: '+(muted?'no':'sí'); initAudio(); if(master) master.gain.setTargetAtTime(muted?0:1,AC.currentTime,0.02); });
+function toggleSound(){
+  muted=!muted; $('sndBtn').textContent='Sonido: '+(muted?'no':'sí'); initAudio();
+  if(master) master.gain.setTargetAtTime(muted?0:1,AC.currentTime,0.02);
+  toast('Sonido '+(muted?'desactivado':'activado'),'warn');
+}
+$('sndBtn').addEventListener('click',toggleSound);
 $('helpBtn').addEventListener('click',()=>showOverlay(HELP));
 $('faultBtn').addEventListener('click',()=>{ initAudio(); if(session.active) triggerFault(); });
 /* menú de configuración */
@@ -1347,8 +1357,95 @@ const vrCanvas=document.createElement('canvas'); vrCanvas.width=640; vrCanvas.he
 const vrCtx=vrCanvas.getContext('2d');
 const vrTex=new THREE.CanvasTexture(vrCanvas);
 const vrPanel=new THREE.Mesh(new THREE.PlaneGeometry(1.28,0.72),new THREE.MeshBasicMaterial({map:vrTex,transparent:true}));
-vrPanel.position.set(-0.75,1.25,-1.5); vrPanel.rotation.y=0.4; vrPanel.visible=false; rig.add(vrPanel);
-function cycleVRPos(){ vrPosIdx=(vrPosIdx+1)%VR_POS.length; if(renderer.xr.isPresenting) rig.position.set(...VR_POS[vrPosIdx].p); }
+vrTex.encoding=THREE.sRGBEncoding;
+vrPanel.visible=false; rig.add(vrPanel);
+/* Pose del panel de estado (relativa al operador): más pequeño y fuera de la línea de visión.
+   - al aire libre: esquina baja izquierda (se lee bajando la vista), sin tapar la máquina;
+   - en la sala de mando: sobre el escritorio, inclinado hacia el operador y bajo la pared de monitores.
+   Ajustar p (x,y,z en m), rx (inclinación), ry (giro) y s (escala) si hace falta. */
+const PANEL_FIELD={p:[-0.62,0.95,-1.15], rx:-0.45, ry:0.38, s:0.5};
+const PANEL_ROOM ={p:[0,0.80,-0.80],    rx:-0.90, ry:0,    s:0.55};
+function placeVRPanel(){
+  const k=(vrPosIdx===ROOM_IDX)?PANEL_ROOM:PANEL_FIELD;
+  vrPanel.position.set(k.p[0],k.p[1],k.p[2]); vrPanel.rotation.set(k.rx,k.ry,0,'YXZ'); vrPanel.scale.set(k.s,k.s,1);
+}
+function cycleVRPos(){ vrPosIdx=(vrPosIdx+1)%VR_POS.length; if(renderer.xr.isPresenting){ rig.position.set(...VR_POS[vrPosIdx].p); placeVRPanel(); } }
+
+/* --- Pantalla de inicio dentro de VR ---
+   Al entrar en VR aparece una tarjeta con el logo y la elección de modo. Se elige apuntando con el
+   rayo del control y presionando el gatillo; respaldo con botones: A = Formación, B = Evaluación.
+   Clic del stick derecho = volver a esta pantalla; clic del stick izquierdo = sonido sí/no. */
+const VS={W:1024,H:640,btn:{train:{x:90,y:420,w:400,h:100},eval:{x:534,y:420,w:400,h:100}}};
+const vsCanvas=document.createElement('canvas'); vsCanvas.width=VS.W; vsCanvas.height=VS.H;
+const vsCtx=vsCanvas.getContext('2d');
+const vsTex=new THREE.CanvasTexture(vsCanvas); vsTex.encoding=THREE.sRGBEncoding;
+const vsMesh=new THREE.Mesh(new THREE.PlaneGeometry(1.6,1.0),new THREE.MeshBasicMaterial({map:vsTex,transparent:true}));
+vsMesh.position.set(0,1.5,-1.7); vsMesh.visible=false; rig.add(vsMesh);
+let vrStartActive=false, vsHover=null;
+const logoImg=new Image(); logoImg.onload=()=>{ if(vrStartActive) drawVRStart(); }; logoImg.src=LOGO_SRC;
+function vsRR(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+function drawVRStart(){
+  const c=vsCtx, W=VS.W, H=VS.H;
+  c.clearRect(0,0,W,H);
+  c.fillStyle='#1f2328'; vsRR(c,3,3,W-6,H-6,34); c.fill();
+  c.strokeStyle='#f2b705'; c.lineWidth=8; vsRR(c,4,4,W-8,H-8,34); c.stroke();
+  c.textAlign='center'; c.textBaseline='top';
+  if(logoImg.complete&&logoImg.naturalWidth){ const lw=250, lh=lw*logoImg.naturalHeight/logoImg.naturalWidth; c.drawImage(logoImg,(W-lw)/2,26,lw,lh); }
+  c.fillStyle='#ffffff'; c.font='bold 42px sans-serif'; c.fillText('Simulador Pica Roca (Rockbreaker)',W/2,232);
+  c.fillStyle='#f2b705'; c.font='bold 28px sans-serif'; c.fillText('Entrenamiento y evaluación',W/2,288);
+  c.fillStyle='#c9ced6'; c.font='24px sans-serif';
+  c.fillText('1) START para habilitar el mando. 2) Lleva la punta a la roca.',W/2,336);
+  c.fillText('3) Martillo casi vertical. 4) Mantén GOLPEAR.',W/2,368);
+  const t=VS.btn.train, e=VS.btn.eval;
+  c.fillStyle=(vsHover==='train')?'#ffd84d':'#f2b705'; vsRR(c,t.x,t.y,t.w,t.h,18); c.fill();
+  c.fillStyle='#1f2328'; c.textBaseline='middle'; c.font='bold 40px sans-serif'; c.fillText('Formación',t.x+t.w/2,t.y+t.h/2-10);
+  c.font='22px sans-serif'; c.fillText('botón A',t.x+t.w/2,t.y+t.h/2+28);
+  if(vsHover==='eval'){ c.fillStyle='rgba(242,183,5,0.28)'; vsRR(c,e.x,e.y,e.w,e.h,18); c.fill(); }
+  c.strokeStyle='#f2b705'; c.lineWidth=5; vsRR(c,e.x,e.y,e.w,e.h,18); c.stroke();
+  c.fillStyle='#f2b705'; c.font='bold 40px sans-serif'; c.fillText('Evaluación',e.x+e.w/2,e.y+e.h/2-10);
+  c.font='22px sans-serif'; c.fillText('botón B',e.x+e.w/2,e.y+e.h/2+28);
+  c.textBaseline='top'; c.fillStyle='#9aa3ab'; c.font='22px sans-serif';
+  c.fillText('Apunta con el control y presiona el gatillo, o usa los botones A / B',W/2,552);
+  c.font='19px sans-serif';
+  c.fillText('Clic del stick derecho: volver a esta pantalla · Clic del stick izquierdo: sonido sí/no',W/2,592);
+  vsTex.needsUpdate=true;
+}
+const _rc=new THREE.Raycaster(), _rm=new THREE.Matrix4(), _ray=new THREE.Ray();
+function ctrlRay(c){ _rm.extractRotation(c.matrixWorld); _ray.origin.setFromMatrixPosition(c.matrixWorld); _ray.direction.set(0,0,-1).applyMatrix4(_rm).normalize(); return _ray; }
+function vsPick(ray){          // rayo en mundo -> {k:'train'|'eval'|null, d:distancia|null}
+  _rc.ray.copy(ray);
+  const h=_rc.intersectObject(vsMesh,false)[0]; if(!h||!h.uv) return {k:null,d:null};
+  const x=h.uv.x*VS.W, y=(1-h.uv.y)*VS.H; let k=null;
+  for(const n of ['train','eval']){ const b=VS.btn[n]; if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h) k=n; }
+  return {k,d:h.distance};
+}
+const vrCtrls=[0,1].map(i=>{
+  const c=renderer.xr.getController(i); rig.add(c);
+  const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-1)]),new THREE.LineBasicMaterial({color:0xf2b705}));
+  ln.visible=false; c.add(ln); c.userData.ln=ln; c.userData.on=false;
+  c.addEventListener('connected',()=>{ c.userData.on=true; });
+  c.addEventListener('disconnected',()=>{ c.userData.on=false; ln.visible=false; });
+  c.addEventListener('selectstart',()=>{ if(!vrStartActive) return; const r=vsPick(ctrlRay(c)); if(r.k) vrStartChoose(r.k); });
+  return c;
+});
+function vrStartTick(){        // cada cuadro mientras la tarjeta está abierta: rayo y resalte del botón apuntado
+  let hov=null;
+  for(const c of vrCtrls){
+    const ln=c.userData.ln; if(!c.userData.on){ ln.visible=false; continue; }
+    const r=vsPick(ctrlRay(c)); ln.visible=true; ln.scale.z=(r.d!=null)?r.d:2.5; if(r.k) hov=r.k;
+  }
+  if(hov!==vsHover){ vsHover=hov; drawVRStart(); }
+}
+function vrStartShow(){
+  vrStartActive=true; vsHover=null; vsMesh.visible=true; vrPanel.visible=false; drawVRStart();
+  menuMusic=true; musicSync();
+}
+function vrStartChoose(k){
+  if(!vrStartActive) return;
+  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false;
+  vrPanel.visible=true; placeVRPanel(); drawVRPanel();
+  initAudio(); setMode(k); hideOverlay();     // en VR el cuadro HTML no se ve: el panel flotante guía el resto
+}
 
 /* --- Sala de mando remota (control room), 5º punto de teletransporte ---
    Pared de monitores con el feed EN VIVO de las 8 cámaras ya definidas en VIEWS
@@ -1361,42 +1458,54 @@ const monitorCams=[], monitorRTs=[];
 (function buildControlRoom(){
   const M_bezel=new THREE.MeshStandardMaterial({color:srgb(0x15181b),roughness:.6,metalness:.25});
   const M_frame=new THREE.MeshStandardMaterial({color:srgb(0x2a2f34),roughness:.5,metalness:.4});
-  scene.add(box(3.1,2.15,0.08,M_frame,roomX,1.8,wallZ-0.05));          // pared de fondo
+  /* Pared: un monitor GRANDE central con la vista cenital y 7 monitores menores en una fila inferior.
+     Se lee desde 2 m: el grande mide 1,52 × 0,95 m; los menores 0,40 × 0,25 m (antes 0,50 × 0,30). */
+  const BIG={w:1.52,h:0.95,y:2.02}, SM={w:0.40,h:0.25,gap:0.06,y:1.28};
+  scene.add(box(3.4,1.95,0.08,M_frame,roomX,1.8,wallZ-0.05));          // pared de fondo
   scene.add(box(2.2,0.06,0.7,M_frame,roomX,0.72,roomZ-0.9));           // tablero del escritorio
   scene.add(box(2.2,0.7,0.05,M_bezel,roomX,0.36,roomZ-1.22));          // frente del mueble
-  const screenW=0.5, screenH=0.3, gapX=0.09, gapY=0.09, cols=4, rows=2;
-  const totalW=cols*screenW+(cols-1)*gapX;
-  for(let i=0;i<cols*rows;i++){
-    const col=i%cols, row=Math.floor(i/cols);
-    const x=roomX-totalW/2+screenW/2+col*(screenW+gapX);
-    const y=2.1-row*(screenH+gapY);
-    scene.add(box(screenW+0.06,screenH+0.06,0.04,M_bezel,x,y,wallZ-0.01));
-    const rt=new THREE.WebGLRenderTarget(480,300,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+  const smallViews=[0,1,2,3,5,6,7];                                    // índices de VIEWS (el 4, cenital, va en el grande)
+  const totW=smallViews.length*SM.w+(smallViews.length-1)*SM.gap;
+  const specs=[{vi:4,x:roomX,y:BIG.y,w:BIG.w,h:BIG.h,rw:800,rh:500,fov:46,lw:0.9,ly:BIG.y+BIG.h/2+0.085}];
+  smallViews.forEach((vi,i)=>specs.push({vi,x:roomX-totW/2+SM.w/2+i*(SM.w+SM.gap),y:SM.y,w:SM.w,h:SM.h,rw:400,rh:250,fov:50,lw:SM.w,ly:SM.y-SM.h/2-0.05}));
+  function labelPlane(text,w,x,y){
+    const c=document.createElement('canvas'); c.width=512; c.height=80; const g=c.getContext('2d');
+    g.fillStyle='#f2b705'; g.font='bold 46px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,256,42);
+    const tx=new THREE.CanvasTexture(c); tx.encoding=THREE.sRGBEncoding;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(w,w*80/512),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
+    m.position.set(x,y,wallZ+0.012); scene.add(m);
+  }
+  for(const sp of specs){
+    scene.add(box(sp.w+0.06,sp.h+0.06,0.04,M_bezel,sp.x,sp.y,wallZ-0.01));
+    const rt=new THREE.WebGLRenderTarget(sp.rw,sp.rh,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
     monitorRTs.push(rt);
-    const v=VIEWS[i%VIEWS.length];
-    const cam=new THREE.PerspectiveCamera(50,480/300,0.1,220);
+    const v=VIEWS[sp.vi];
+    const cam=new THREE.PerspectiveCamera(sp.fov,sp.rw/sp.rh,0.1,220);
     cam.position.set(...v.p); cam.lookAt(...v.t);
     monitorCams.push(cam);
-    const screen=new THREE.Mesh(new THREE.PlaneGeometry(screenW,screenH), new THREE.MeshBasicMaterial({map:rt.texture,toneMapped:false}));
-    screen.position.set(x,y,wallZ+0.015);
+    const screen=new THREE.Mesh(new THREE.PlaneGeometry(sp.w,sp.h), new THREE.MeshBasicMaterial({map:rt.texture,toneMapped:false}));
+    screen.position.set(sp.x,sp.y,wallZ+0.015);
     scene.add(screen);
+    labelPlane('CÁM '+(sp.vi+1)+' · '+cap1(v.n),sp.lw,sp.x,sp.ly);
   }
 })();
-let monitorFrame=0;
+let monitorFrame=0, monitorTick=0;
 function updateControlRoomScreens(){
-  const batch=2;    // se refrescan 2 de los 8 monitores por frame (ciclo completo ≈4 frames)
+  // monitorCams[0] = grande (cenital): se refresca cada 2 cuadros; los 7 menores, 2 por cuadro en rotación.
   // mientras xr.enabled=true, renderer.render() sustituye SIEMPRE la cámara que le pasamos
   // por la del propio casco (xr.getCamera). Hay que apagarlo durante estas pasadas, igual
   // que hace THREE.CubeCamera cuando renderiza a textura dentro de una sesión XR.
   const xrWasEnabled=renderer.xr.enabled;
   renderer.xr.enabled=false;
-  for(let k=0;k<batch;k++){
-    const i=(monitorFrame+k)%monitorCams.length;
+  const nSm=monitorCams.length-1, jobs=[];
+  if((monitorTick++&1)===0) jobs.push(0);
+  for(let k=0;k<2;k++) jobs.push(1+(monitorFrame+k)%nSm);
+  monitorFrame=(monitorFrame+2)%nSm;
+  for(const i of jobs){
     renderer.setRenderTarget(monitorRTs[i]);
     renderer.render(scene,monitorCams[i]);
   }
   renderer.xr.enabled=xrWasEnabled;
-  monitorFrame=(monitorFrame+batch)%monitorCams.length;
   renderer.setRenderTarget(null);
 }
 function wrapText(c,text,x,y,maxW,lh){
@@ -1429,9 +1538,10 @@ function drawVRPanel(){
     c.fillStyle=lastToast.type==='bad'?'#ff6b6b':(lastToast.type==='ok'?'#4be08f':'#ffd166');
     c.font='bold 26px sans-serif'; c.fillText(lastToast.msg,20,240);
   }
-  c.font='17px sans-serif'; c.fillStyle='#9aa3ab';
-  c.fillText('Sticks: mover · Gatillo: golpear · A: START · B/agarre: EMERGENCIA',20,H-62);
-  c.fillText('X: posición ('+VR_POS[vrPosIdx].n+') · Y: modo ('+(mode==='train'?'formación':'evaluación')+')',20,H-36);
+  c.font='16px sans-serif'; c.fillStyle='#9aa3ab';
+  c.fillText('Sticks: mover · Gatillo: golpear · A: START · B/agarre: EMERGENCIA',20,H-84);
+  c.fillText('X: posición ('+VR_POS[vrPosIdx].n+') · Y: modo ('+(mode==='train'?'formación':'evaluación')+')',20,H-60);
+  c.fillText('Clic stick izq.: sonido ('+(muted?'no':'sí')+') · Clic stick der.: pantalla de inicio',20,H-36);
   vrTex.needsUpdate=true;
 }
 const vrDiag={sup:undefined};
@@ -1443,11 +1553,14 @@ function vrMsg(msg){
   showOverlay('<h2>Realidad virtual</h2><p>'+msg+'</p><p class="small">'+diagText()+'</p><p class="small">Requiere un visor con WebXR (Meta Quest) y abrir la página desde su navegador. Si el diagnóstico dice que no hay HTTPS, hay que alojar el HTML en un servidor con HTTPS (GitHub Pages, Vercel o Netlify).</p><button class="cta" data-act="close">Cerrar</button>');
 }
 function onVRStart(){
-  rig.position.set(...VR_POS[vrPosIdx].p); vrPanel.visible=true; sun.castShadow=false;
+  rig.position.set(...VR_POS[vrPosIdx].p); placeVRPanel(); sun.castShadow=false;
   $('vrBtn').textContent='Salir de VR'; drawVRPanel();
+  vrStartShow();      // al entrar en VR aparece primero la pantalla de inicio
 }
 function onVREnd(){
   rig.position.set(0,0,0); rig.rotation.set(0,0,0); vrPanel.visible=false; sun.castShadow=true;
+  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false;
+  menuMusic=(ov.style.display==='flex'); musicSync();
   $('vrBtn').textContent='Entrar en VR'; resize();
   if(mode==='eval'&&!session.active&&!session.ended) evalIntro();
 }
@@ -1475,6 +1588,9 @@ let last=performance.now();
 function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
   try{ step(dt); }catch(err){ console.error(err); }
+  if(renderer.xr.isPresenting && vrStartActive){
+    try{ vrStartTick(); }catch(err){ console.error(err); }
+  }
   if(renderer.xr.isPresenting && vrPosIdx===ROOM_IDX){
     try{ updateControlRoomScreens(); }catch(err){ console.error(err); }
   }
