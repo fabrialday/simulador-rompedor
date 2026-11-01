@@ -1467,9 +1467,10 @@ const monitorCams=[], monitorRTs=[];
   scene.add(box(2.2,0.7,0.05,M_bezel,roomX,0.36,roomZ-1.22));          // frente del mueble
   const smallViews=[0,1,2,3,5,6,7];                                    // índices de VIEWS (el 4, cenital, va en el grande)
   // grande abajo al centro; 3 chicos en fila arriba; 2 a cada lado (columnas)
-  const smallPos=[[-0.48,2.22],[0,2.22],[0.48,2.22],[-1.08,1.72],[-1.08,1.32],[1.08,1.72],[1.08,1.32]];
+  const smallPos=[[-0.48,2.22],[0,2.22],[0.48,2.22],[-1.15,1.75],[-1.15,1.24],[1.15,1.75],[1.15,1.24]];
   const specs=[{vi:4,x:roomX,y:BIG.y,w:BIG.w,h:BIG.h,rw:800,rh:500,fov:46,lw:0.9,ly:BIG.y-BIG.h/2-0.07}];
-  smallViews.forEach((vi,i)=>specs.push({vi,x:roomX+smallPos[i][0],y:smallPos[i][1],w:SM.w,h:SM.h,rw:400,rh:250,fov:50,lw:SM.w,ly:smallPos[i][1]-SM.h/2-0.05}));
+  smallViews.forEach((vi,i)=>{ const side=i>=3, w=side?0.56:SM.w, h=side?0.35:SM.h;    // los laterales del grande, más grandes
+    specs.push({vi,x:roomX+smallPos[i][0],y:smallPos[i][1],w,h,rw:side?560:400,rh:side?350:250,fov:50,lw:w,ly:smallPos[i][1]-h/2-0.05}); });
   function labelPlane(text,w,x,y){
     const c=document.createElement('canvas'); c.width=512; c.height=80; const g=c.getContext('2d');
     g.fillStyle='#f2b705'; g.font='bold 46px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,256,42);
@@ -1525,7 +1526,7 @@ const joySticks=[], joyOut=[{x:0,y:0},{x:0,y:0}], joyNear={left:false,right:fals
     const m=new THREE.Mesh(new THREE.PlaneGeometry(0.27,0.27),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
     m.rotation.x=-Math.PI/2; m.position.set(x,deskY+0.004,z); scene.add(m);
   }
-  [{x:roomX-0.30,dx:-0.34,l:['GIRO','BRAZO']},{x:roomX+0.30,dx:0.34,l:['MARTILLO','PLUMA']}].forEach(s=>{
+  [{x:roomX-0.17,dx:-0.34,l:['GIRO','BRAZO']},{x:roomX+0.17,dx:0.34,l:['MARTILLO','PLUMA']}].forEach(s=>{
     const z=roomZ-0.62, P=new THREE.Vector3(s.x,deskY+0.03,z);
     scene.add(box(0.24,0.03,0.26,M_plate,s.x,deskY+0.015,z));
     const lever=new THREE.Group(); lever.position.copy(P); scene.add(lever);
@@ -1541,7 +1542,7 @@ const joySticks=[], joyOut=[{x:0,y:0},{x:0,y:0}], joyNear={left:false,right:fals
 /* Botones START (verde) y STOP (rojo) en la fila delantera del escritorio: se pulsan tocándolos con la mano. */
 const deskBtns=[];
 (function buildDeskButtons(){
-  const deskY=0.75, z=roomZ-0.40;
+  const deskY=0.75, z=roomZ-0.36;
   function label(text,x,col){
     const c=document.createElement('canvas'); c.width=256; c.height=96; const g=c.getContext('2d');
     g.fillStyle=col; g.font='bold 70px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,128,50);
