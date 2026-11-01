@@ -70,6 +70,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:#f2f3f
 .thumb .trec{position:absolute;right:4px;top:3px;font:700 9px/1 var(--font);color:#ff5a4d;text-shadow:0 1px 2px #000;pointer-events:none}
 @media (max-width:760px){ #thumbs{display:none} }
 #start:disabled{opacity:.4;cursor:not-allowed}
+#crashAlert{position:absolute;left:50%;top:18%;transform:translateX(-50%);background:rgba(190,20,20,.94);color:#fff;border:4px solid #fff;border-radius:10px;padding:10px 26px;text-align:center;pointer-events:none;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#crashAlert b{display:block;font-size:34px;letter-spacing:2px}#crashAlert span{font-size:18px;font-weight:600}
 #toasts{position:absolute;left:0;right:0;top:44%;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
 .toast{background:rgba(18,20,23,.9);border-left:5px solid var(--amber);padding:7px 12px;border-radius:4px;font-size:14px;font-weight:600;max-width:88%}
 .toast.bad{border-color:var(--bad)} .toast.ok{border-color:var(--ok)} .toast.warn{border-color:var(--warn)}
@@ -177,6 +179,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:#f2f3f
 
   <div id="toasts"></div>
   <div id="flash"></div>
+  <div id="crashAlert"><b>¡CHOQUE!</b><span></span></div>
 
   <div id="controls">
     <div class="pad">
@@ -311,6 +314,7 @@ function cyl(r,len,mat,axis){ const m=new THREE.Mesh(new THREE.CylinderGeometry(
 
 /* --- piso con hueco para la parrilla --- */
 const GR = {x0:3.0,x1:8.2,z:3.8};
+const DEST_SRC=[];   // estructuras derribables: se crean tras definir WALLS
 (function buildGround(){
   const s = new THREE.Shape(); s.moveTo(-150,-150); s.lineTo(150,-150); s.lineTo(150,150); s.lineTo(-150,150); s.lineTo(-150,-150);
   const h = new THREE.Path(); h.moveTo(GR.x0,-GR.z); h.lineTo(GR.x1,-GR.z); h.lineTo(GR.x1,GR.z); h.lineTo(GR.x0,GR.z); h.lineTo(GR.x0,-GR.z);
@@ -329,19 +333,47 @@ const GR = {x0:3.0,x1:8.2,z:3.8};
   for(let z=-3.4; z<=3.4; z+=1.7){ scene.add(box(GR.x1-GR.x0,0.12,0.16,M.grate,cx,0.02,z)); }
   // paredes de la tolva con franja de advertencia y contrafuertes
   function wall(w,h,d,x,y,z,alongX){
-    scene.add(box(w,h,d,M.wall,x,y,z));
-    scene.add(box(w+0.02,0.07,d+0.02,M.hazard,x,y+h/2+0.035,z));
+    const a=box(w,h,d,M.wall,x,y,z), b=box(w+0.02,0.07,d+0.02,M.hazard,x,y+h/2+0.035,z);
+    scene.add(a); scene.add(b); return [a,b];
   }
-  wall(5.8,1.4,0.4,5.9,0.7,4.0); wall(5.8,1.4,0.4,5.9,0.7,-4.0); wall(0.4,1.6,8.4,8.6,0.8,0);
-  for(let x=3.6;x<=8.4;x+=1.6){ scene.add(box(0.3,1.4,0.35,M.concrete,x,0.7,4.3)); scene.add(box(0.3,1.4,0.35,M.concrete,x,0.7,-4.3)); }
-  for(let z=-3.2;z<=3.2;z+=1.6){ scene.add(box(0.35,1.6,0.3,M.concrete,8.95,0.8,z)); }
+  const wN=wall(5.8,1.4,0.4,5.9,0.7,4.0), wS=wall(5.8,1.4,0.4,5.9,0.7,-4.0), wE=wall(0.4,1.6,8.4,8.6,0.8,0);
+  const addB=(arr,m)=>{ scene.add(m); arr.push(m); };
+  for(let x=3.6;x<=8.4;x+=1.6){ addB(wN,box(0.3,1.4,0.35,M.concrete,x,0.7,4.3)); addB(wS,box(0.3,1.4,0.35,M.concrete,x,0.7,-4.3)); }
+  for(let z=-3.2;z<=3.2;z+=1.6){ addB(wE,box(0.35,1.6,0.3,M.concrete,8.95,0.8,z)); }
+  DEST_SRC.push({name:'el muro lateral',meshes:wN,pivot:[5.9,0,4.2],axis:'x',dir:1,walls:[0]},
+                {name:'el muro lateral',meshes:wS,pivot:[5.9,0,-4.2],axis:'x',dir:-1,walls:[1]},
+                {name:'el muro del fondo',meshes:wE,pivot:[8.8,0,0],axis:'z',dir:-1,walls:[2]});
 })();
 const WALLS = [
   {x0:3.0,x1:8.8,z0:3.8,z1:4.2,h:1.4},
   {x0:3.0,x1:8.8,z0:-4.2,z1:-3.8,h:1.4},
   {x0:8.4,x1:8.8,z0:-4.2,z1:4.2,h:1.6},
-  {x0:-1.0,x1:1.0,z0:-1.0,z1:1.0,h:1.05}    // pedestal
+  {x0:-1.0,x1:1.0,z0:-1.0,z1:1.0,h:1.05,name:'la base de la máquina'}    // pedestal (no se derriba)
 ];
+/* --- Estructuras derribables: al chocar con ellas caen girando sobre su base (muros y carteles) --- */
+const DEST=[];
+function makeDest(name,meshes,pivot,axis,dir){
+  const g=new THREE.Group(); g.position.set(...pivot); scene.add(g); g.updateMatrixWorld(true);
+  meshes.forEach(m=>g.attach(m));
+  const d={name,g,axis,dir,ang:0,av:0,state:0,max:1.5,walls:[]}; DEST.push(d); return d;
+}
+DEST_SRC.forEach(s=>{ const d=makeDest(s.name,s.meshes,s.pivot,s.axis,s.dir); s.walls.forEach(i=>{ WALLS[i].d=d; WALLS[i].name=s.name; d.walls.push(WALLS[i]); }); });
+const _dp=new THREE.Vector3();
+function updateDest(dt){
+  for(const d of DEST){
+    if(d.state!==1) continue;
+    d.av+=dt*7; d.ang+=d.av*dt;
+    if(d.ang>=d.max){ d.ang=d.max; d.state=2;
+      _dp.set(d.g.position.x,0.3,d.g.position.z); if(d.axis==='x') _dp.z+=d.dir*1.6; else _dp.x-=d.dir*1.6;
+      spawnPuff(_dp,8,2.2,1.8); rockAvalanche(); }
+    d.g.rotation[d.axis]=d.dir*d.ang;
+  }
+}
+function knockDown(w){
+  const d=w.d; if(!d||d.state) return; d.state=1; d.av=0.4; d.walls.forEach(e=>e.down=true);
+  if(session) session.derr=(session.derr||0)+1;
+}
+function resetStructures(){ for(const d of DEST){ d.state=0; d.ang=0; d.av=0; d.g.rotation.set(0,0,0); d.walls.forEach(e=>e.down=false); } }
 
 /* --- máquina --- */
 function pin(x,y,zLen){ const g=new THREE.Group(); g.add(cyl(0.17,zLen,M.steel,'z'));
@@ -454,8 +486,12 @@ const SIGNBACK=new THREE.MeshStandardMaterial({color:srgb(0xa9aeb3),roughness:.8
 function sign(lines,bg,fg,x,y,z,w,h){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:signTex(lines,bg,fg),toneMapped:false}));
   m.position.set(x,y,z); scene.add(m);
-  scene.add(box(w+0.08,h+0.08,0.05,SIGNBACK,x,y,z-0.04));
-  [-1,1].forEach(sg=>scene.add(box(0.1,y,0.1,M.dark,x+sg*(w/2-0.2),y/2,z-0.1)));
+  const meshes=[m], back=box(w+0.08,h+0.08,0.05,SIGNBACK,x,y,z-0.04); scene.add(back); meshes.push(back);
+  [-1,1].forEach(sg=>{ const p=box(0.1,y,0.1,M.dark,x+sg*(w/2-0.2),y/2,z-0.1); scene.add(p); meshes.push(p); });
+  const d=makeDest('el cartel «'+lines[0].toLowerCase()+'»',meshes,[x,0,z-0.1],'x',-1);
+  const e=[{x0:x-w/2,x1:x+w/2,z0:z-0.2,z1:z+0.15,y0:y-h/2,y1:y+h/2},
+           {x0:x-w/2+0.1,x1:x-w/2+0.3,z0:z-0.2,z1:z,y0:0,y1:y-h/2},{x0:x+w/2-0.3,x1:x+w/2-0.1,z0:z-0.2,z1:z,y0:0,y1:y-h/2}];
+  e.forEach(q=>{ q.d=d; q.name=d.name; q.h=q.y1; WALLS.push(q); d.walls.push(q); });
 }
 sign([SITE.area.toUpperCase(),SITE.nombre],'#0d5aa7','#ffffff',3.9,2.6,-4.9,2.4,1.2);
 sign(['ZONA DE MARTILLO','PROHIBIDO EL PASO'],'#f2b705','#111111',6.4,2.6,-4.9,2.4,1.2);
@@ -687,7 +723,7 @@ function spawnInitialRocks(){
 function resetWorld(){
   clearWorld();
   J.phi=0; J.t2=55*D2R; J.t3=-90*D2R; J.t4=-55*D2R; for(const k of JN) V[k]=0;
-  machine='off'; strikeAcc=0.22; blankT=0; collCool=0;
+  machine='off'; strikeAcc=0.22; blankT=0; collCool=0; resetStructures(); hideCrash();
   session=newSession(); applyPose();
   introPending=true; introActive=false;
   if(truckBed) truckBed.rotation.z=0;
@@ -955,6 +991,30 @@ function toast(msg,type){
   while(box.children.length>3) box.removeChild(box.firstChild);
   setTimeout(()=>{ if(d.parentNode) d.parentNode.removeChild(d); },1900);
 }
+/* Alerta de choque: banda roja en pantalla (PC) y cartel que sigue la mirada (VR), más vibración de los controles */
+let crashT=0;
+const crashCv=document.createElement('canvas'); crashCv.width=768; crashCv.height=240; const crashTex=new THREE.CanvasTexture(crashCv); crashTex.encoding=THREE.sRGBEncoding;
+const crashMesh=new THREE.Mesh(new THREE.PlaneGeometry(1.1,0.344),new THREE.MeshBasicMaterial({map:crashTex,transparent:true,depthTest:false,toneMapped:false}));
+crashMesh.visible=false; crashMesh.renderOrder=999; scene.add(crashMesh);
+function showCrash(name,fell){
+  crashT=3;
+  const sub='Chocaste con '+name+(fell?' y la derribaste':'');
+  const el=$('crashAlert'); el.querySelector('span').textContent=sub; el.style.display='block';
+  const g=crashCv.getContext('2d'); g.clearRect(0,0,768,240);
+  g.fillStyle='rgba(190,20,20,0.95)'; g.fillRect(0,0,768,240); g.strokeStyle='#fff'; g.lineWidth=10; g.strokeRect(8,8,752,224);
+  g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle'; g.font='bold 96px sans-serif'; g.fillText('¡CHOQUE!',384,85);
+  g.font='bold 38px sans-serif'; g.fillText(sub.length>40?sub.slice(0,40)+'…':sub,384,175); crashTex.needsUpdate=true;
+  crashMesh.visible=renderer.xr.isPresenting;
+  try{ const xs=renderer.xr.getSession&&renderer.xr.getSession(); if(xs) for(const src of xs.inputSources){ const a=src.gamepad&&src.gamepad.hapticActuators&&src.gamepad.hapticActuators[0]; if(a&&a.pulse) a.pulse(1,300); } }catch(e){}
+}
+function hideCrash(){ crashT=0; $('crashAlert').style.display='none'; crashMesh.visible=false; }
+const _cp=new THREE.Vector3(), _cd=new THREE.Vector3();
+function updateCrash(dt){
+  if(crashT<=0) return; crashT-=dt;
+  if(crashT<=0){ hideCrash(); return; }
+  if(crashMesh.visible){ camera.getWorldPosition(_cp); camera.getWorldDirection(_cd); _cd.y*=0.3; _cd.normalize();
+    crashMesh.position.copy(_cp).addScaledVector(_cd,1.1); crashMesh.position.y=_cp.y-0.12; crashMesh.lookAt(_cp); }
+}
 function flash(){ const f=$('flash'); f.style.opacity=.28; setTimeout(()=>f.style.opacity=0,120); }
 
 /* =====================================================
@@ -1084,7 +1144,7 @@ function hitsSomething(){
   for(const [o,minY] of list){
     o.getWorldPosition(_t);
     if(_t.y<minY) return 'la parrilla o el piso';
-    for(const w of WALLS){ if(_t.x>w.x0&&_t.x<w.x1&&_t.z>w.z0&&_t.z<w.z1&&_t.y<w.h) return 'la estructura'; }
+    for(const w of WALLS){ if(!w.down&&_t.x>w.x0&&_t.x<w.x1&&_t.z>w.z0&&_t.z<w.z1&&_t.y<w.h&&_t.y>=(w.y0||0)) return w; }
   }
   return null;
 }
@@ -1146,10 +1206,15 @@ function step(dt){
     const hit=hitsSomething();
     if(hit){
       for(const k of JN){J[k]=prev[k];V[k]=0;} applyPose();
-      if(collCool<=0){ session.colis++; collCool=0.8; log('colisión con '+hit); toast('Colisión con '+hit,'bad'); flash(); sfx('coll'); }
+      if(collCool<=0){
+        const nm=(typeof hit==='string')?'la parrilla o el piso':(hit.name||'la estructura');
+        session.colis++; collCool=0.8; log('colisión con '+nm); toast('Colisión con '+nm,'bad'); flash(); sfx('coll');
+        showCrash(nm,typeof hit!=='string'&&!!hit.d);
+        if(typeof hit!=='string') knockDown(hit);
+      }
     }
   }
-  collCool-=dt;
+  collCool-=dt; updateDest(dt); updateCrash(dt);
 
   // martillo
   if(can && ax.hammer){
@@ -1365,7 +1430,7 @@ vrPanel.visible=false; rig.add(vrPanel);
    - en la sala de mando: sobre el escritorio, inclinado hacia el operador y bajo la pared de monitores.
    Ajustar p (x,y,z en m), rx (inclinación), ry (giro) y s (escala) si hace falta. */
 const PANEL_FIELD={p:[-0.62,0.95,-1.15], rx:-0.45, ry:0.38, s:0.5};
-const PANEL_ROOM ={p:[0,0.92,-1.02],    rx:-1.15, ry:0,    s:0.5};
+const PANEL_ROOM ={p:[0,0.80,-1.05],    rx:-1.35, ry:0,    s:0.5};
 function placeVRPanel(){
   const k=(vrPosIdx===ROOM_IDX)?PANEL_ROOM:PANEL_FIELD;
   vrPanel.position.set(k.p[0],k.p[1],k.p[2]); vrPanel.rotation.set(k.rx,k.ry,0,'YXZ'); vrPanel.scale.set(k.s,k.s,1);
@@ -1464,13 +1529,13 @@ const monitorCams=[], monitorRTs=[];
   const M_frame=new THREE.MeshStandardMaterial({color:srgb(0x2a2f34),roughness:.5,metalness:.4});
   /* Pared: un monitor GRANDE central con la vista cenital y 7 monitores menores en una fila inferior.
      Se lee desde 2 m: el grande mide 1,52 × 0,95 m; los menores 0,40 × 0,25 m (antes 0,50 × 0,30). */
-  const BIG={w:1.52,h:0.95,y:1.45}, SM={w:0.40,h:0.25};
-  scene.add(box(3.4,1.95,0.08,M_frame,roomX,1.8,wallZ-0.05));          // pared de fondo
+  const BIG={w:1.52,h:0.95,y:1.20}, SM={w:0.40,h:0.25};
+  scene.add(box(3.4,2.0,0.08,M_frame,roomX,1.5,wallZ-0.05));          // pared de fondo
   scene.add(box(2.2,0.06,1.0,M_frame,roomX,0.72,roomZ-0.70));          // tablero: borde a 0,20 m del operador sentado (antebrazos apoyados), fondo a 1,20 m
   scene.add(box(2.2,0.7,0.05,M_bezel,roomX,0.36,roomZ-1.22));          // frente del mueble
   const smallViews=[0,1,2,3,5,6,7];                                    // índices de VIEWS (el 4, cenital, va en el grande)
   // grande abajo al centro; 3 chicos en fila arriba; 2 a cada lado (columnas)
-  const smallPos=[[-0.62,2.30],[0,2.30],[0.62,2.30],[-1.15,1.75],[-1.15,1.24],[1.15,1.75],[1.15,1.24]];
+  const smallPos=[[-0.62,2.00],[0,2.00],[0.62,2.00],[-1.15,1.45],[-1.15,0.95],[1.15,1.45],[1.15,0.95]];
   const specs=[{vi:4,x:roomX,y:BIG.y,w:BIG.w,h:BIG.h,rw:800,rh:500,fov:46,lw:0.9,ly:BIG.y-BIG.h/2-0.07}];
   smallViews.forEach((vi,i)=>{ const side=true, w=0.56, h=0.35;    // los laterales del grande, más grandes
     specs.push({vi,x:roomX+smallPos[i][0],y:smallPos[i][1],w,h,rw:side?560:400,rh:side?350:250,fov:50,lw:w,ly:smallPos[i][1]-h/2-0.05}); });
@@ -1705,7 +1770,7 @@ function onVRStart(){
 }
 function onVREnd(){
   rig.position.set(0,0,0); rig.rotation.set(0,0,0); vrPanel.visible=false; sun.castShadow=true;
-  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false; joyReset();
+  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false; joyReset(); crashMesh.visible=false;
   menuMusic=(ov.style.display==='flex'); musicSync();
   $('vrBtn').textContent='Entrar en VR'; resize();
   if(mode==='eval'&&!session.active&&!session.ended) evalIntro();
