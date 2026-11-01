@@ -1021,6 +1021,7 @@ function readInput(){
     const xs=renderer.xr.getSession&&renderer.xr.getSession();
     if(xs){
       const dz=v=>Math.abs(v)<0.12?0:v;
+      vrJoyStep(xs); sl+=joyOut[0].x; bo+=joyOut[0].y; to+=joyOut[1].x; st+=joyOut[1].y;   // joysticks 3D de la sala
       for(const src of xs.inputSources){
         const gp=src.gamepad; if(!gp) continue; const h=src.handedness;
         const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed), pv=xrPrev[h]||{};
@@ -1032,7 +1033,7 @@ function readInput(){
         const sx=gp.axes.length>=4?gp.axes[2]:gp.axes[0], sy=gp.axes.length>=4?gp.axes[3]:gp.axes[1];
         if(h==='left'){ sl+=dz(sx||0); bo+=-dz(sy||0); } else if(h==='right'){ to+=dz(sx||0); st+=-dz(sy||0); }
         if(b(0)) ham=true;                                    // gatillo = golpear
-        if(b(1)&&!pv[1]) pressEstop();                        // agarre = emergencia
+        if(b(1)&&!pv[1]&&!vrJoyBusy(h)) pressEstop();         // agarre = emergencia (salvo que la mano esté en un joystick)
         if(h==='right'){ if(b(4)&&!pv[4]) pressStart(); if(b(5)&&!pv[5]) pressEstop(); }
         if(h==='left'){ if(b(4)&&!pv[4]) cycleVRPos(); if(b(5)&&!pv[5]) setMode(mode==='train'?'eval':'train'); }
         xrPrev[h]={1:b(1),3:b(3),4:b(4),5:b(5)};
@@ -1274,7 +1275,7 @@ const HELP ='<h2>Simulador de rompedor de rocas</h2>'+
  '<tr><td>Vista</td><td>Botón Vista</td><td>C (cambia) · 1 a 5 (directa)</td></tr></table>'+
  '<p class="small">El mapeo de ejes es provisorio: hay que igualarlo al del mando real.</p>'+
  '<h3>Modos</h3><p><b>Formación:</b> con ayudas, sin límite de tiempo, con falla simulable. <b>Evaluación:</b> sin ayudas, 150 s, mismas rocas y misma falla para todos.</p>'+
- '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo. Clic del stick izquierdo: sonido sí/no. Clic del stick derecho: pantalla de inicio.</p>'+
+ '<h3>Realidad virtual (Meta Quest)</h3><p>Abre esta página en el navegador de la Quest y toca “Entrar en VR”. Sticks: izquierdo = giro y brazo, derecho = martillo y pluma. Gatillo: golpear. A: START. B o agarre: emergencia. X: cambiar posición. Y: cambiar modo. Clic del stick izquierdo: sonido sí/no. Clic del stick derecho: pantalla de inicio. En la sala de mando hay dos joysticks sobre el escritorio: acerca la mano a la perilla amarilla, mantén el agarre y muévela (izquierdo: giro y brazo; derecho: martillo y pluma); al soltar vuelven al centro. Con la mano en un joystick, el agarre no activa la emergencia (usa B).</p>'+
  '<button class="cta" data-act="close">Continuar</button>';
 function evalIntro(){
   showOverlay('<h2>Prueba estándar</h2><p>Duración: 150 s. Las rocas son las mismas para todos los operadores. Sin ayudas visuales. A los 70 s ocurre una falla; la respuesta correcta es la parada de emergencia.</p>'+
@@ -1364,7 +1365,7 @@ vrPanel.visible=false; rig.add(vrPanel);
    - en la sala de mando: sobre el escritorio, inclinado hacia el operador y bajo la pared de monitores.
    Ajustar p (x,y,z en m), rx (inclinación), ry (giro) y s (escala) si hace falta. */
 const PANEL_FIELD={p:[-0.62,0.95,-1.15], rx:-0.45, ry:0.38, s:0.5};
-const PANEL_ROOM ={p:[0,0.80,-0.80],    rx:-0.90, ry:0,    s:0.55};
+const PANEL_ROOM ={p:[0,0.80,-0.80],    rx:-0.90, ry:0,    s:0.5};
 function placeVRPanel(){
   const k=(vrPosIdx===ROOM_IDX)?PANEL_ROOM:PANEL_FIELD;
   vrPanel.position.set(k.p[0],k.p[1],k.p[2]); vrPanel.rotation.set(k.rx,k.ry,0,'YXZ'); vrPanel.scale.set(k.s,k.s,1);
@@ -1462,7 +1463,7 @@ const monitorCams=[], monitorRTs=[];
      Se lee desde 2 m: el grande mide 1,52 × 0,95 m; los menores 0,40 × 0,25 m (antes 0,50 × 0,30). */
   const BIG={w:1.52,h:0.95,y:2.02}, SM={w:0.40,h:0.25,gap:0.06,y:1.28};
   scene.add(box(3.4,1.95,0.08,M_frame,roomX,1.8,wallZ-0.05));          // pared de fondo
-  scene.add(box(2.2,0.06,0.7,M_frame,roomX,0.72,roomZ-0.9));           // tablero del escritorio
+  scene.add(box(2.2,0.06,0.85,M_frame,roomX,0.72,roomZ-0.825));        // tablero del escritorio (más hondo: caben los joysticks)
   scene.add(box(2.2,0.7,0.05,M_bezel,roomX,0.36,roomZ-1.22));          // frente del mueble
   const smallViews=[0,1,2,3,5,6,7];                                    // índices de VIEWS (el 4, cenital, va en el grande)
   const totW=smallViews.length*SM.w+(smallViews.length-1)*SM.gap;
@@ -1489,6 +1490,103 @@ const monitorCams=[], monitorRTs=[];
     labelPlane('CÁM '+(sp.vi+1)+' · '+cap1(v.n),sp.lw,sp.x,sp.ly);
   }
 })();
+/* --- Joysticks 3D sobre el escritorio de la sala de mando ---
+   Izquierda: ↔ Giro, ↕ Brazo.  Derecha: ↔ Martillo, ↕ Pluma (mismo mapeo que los bastones Touch).
+   Se toman con el AGARRE (squeeze) del control estando cerca de la perilla; la inclinación sale de la
+   posición de la mano respecto a la base. Al soltar, la palanca vuelve sola al centro. */
+const JOY={L:0.17, GRAB:0.13, MAX:0.45, DZ:0.06};
+const joySticks=[], joyOut=[{x:0,y:0},{x:0,y:0}], joyNear={left:false,right:false};
+(function buildJoysticks(){
+  const M_plate=new THREE.MeshStandardMaterial({color:srgb(0x1b1e22),roughness:.55,metalness:.45});
+  const M_boot =new THREE.MeshStandardMaterial({color:srgb(0x0e0f10),roughness:.9,metalness:0});
+  const M_shaft=new THREE.MeshStandardMaterial({color:srgb(0x9aa1a8),roughness:.3,metalness:.8});
+  const M_grip =new THREE.MeshStandardMaterial({color:srgb(0x16181a),roughness:.7,metalness:.1});
+  const deskY=0.75;
+  function deskLabel(l1,l2,x,z){
+    const c=document.createElement('canvas'); c.width=512; c.height=160; const g=c.getContext('2d');
+    g.fillStyle='#f2b705'; g.font='bold 56px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText(l1,256,46); g.fillText(l2,256,116);
+    const tx=new THREE.CanvasTexture(c); tx.encoding=THREE.sRGBEncoding;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(0.32,0.1),new THREE.MeshBasicMaterial({map:tx,transparent:true,toneMapped:false}));
+    m.rotation.x=-Math.PI/2; m.position.set(x,deskY+0.004,z); scene.add(m);
+  }
+  [{x:roomX-0.47,l:['GIRO: lados','BRAZO: adelante']},{x:roomX+0.47,l:['MARTILLO: lados','PLUMA: adelante']}].forEach(s=>{
+    const z=roomZ-0.62, P=new THREE.Vector3(s.x,deskY+0.03,z);
+    scene.add(box(0.24,0.03,0.26,M_plate,s.x,deskY+0.015,z));
+    const lever=new THREE.Group(); lever.position.copy(P); scene.add(lever);
+    const boot=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.07,16),M_boot); boot.position.y=0.035; lever.add(boot);
+    const shaft=cyl(0.011,JOY.L,M_shaft); shaft.position.y=JOY.L/2; lever.add(shaft);
+    const grip=cyl(0.022,0.07,M_grip); grip.position.y=JOY.L-0.02; lever.add(grip);
+    const capMat=new THREE.MeshStandardMaterial({color:srgb(0xf2b705),roughness:.4,metalness:.1,emissive:0x000000});
+    const cap=new THREE.Mesh(new THREE.SphereGeometry(0.03,16,12),capMat); cap.position.y=JOY.L+0.03; cap.castShadow=true; lever.add(cap);
+    deskLabel(s.l[0],s.l[1],s.x,z-0.2);
+    joySticks.push({P,lever,cap,capMat,holder:null,tx:0,tz:0});
+  });
+})();
+// manos de los controles (solo visibles en la sala de mando)
+const vrGrips=[0,1].map(i=>{
+  const g=renderer.xr.getControllerGrip(i); rig.add(g);
+  const mat=new THREE.MeshStandardMaterial({color:srgb(0x8b9096),roughness:.6,metalness:.1,emissive:0x000000});
+  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.035,14,10),mat); palm.scale.set(1,0.6,1.3);
+  const wrist=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.025,0.1,10),mat); wrist.rotation.x=Math.PI/2; wrist.position.z=0.07;
+  const hand=new THREE.Group(); hand.add(palm,wrist); hand.visible=false; g.add(hand);
+  g.userData={on:false,hand:'',mesh:hand,mat};
+  g.addEventListener('connected',e=>{ g.userData.on=true; g.userData.hand=(e.data&&e.data.handedness)||''; });
+  g.addEventListener('disconnected',()=>{ g.userData.on=false; hand.visible=false; });
+  return g;
+});
+const _jv=new THREE.Vector3(), _jk=new THREE.Vector3(); let _jt=0;
+function joyReset(){
+  for(const s of joySticks){ s.holder=null; s.tx=s.tz=0; s.lever.rotation.set(0,0,0); s.capMat.emissive.setHex(0); }
+  joyOut[0].x=joyOut[0].y=joyOut[1].x=joyOut[1].y=0; joyNear.left=joyNear.right=false;
+  for(const g of vrGrips) g.userData.mesh.visible=false;
+}
+function vrJoyBusy(h){ return !!joyNear[h]; }
+function vrJoyStep(xs){
+  const now=performance.now(), dt=Math.min(0.1,Math.max(0.001,(now-(_jt||now))/1000)); _jt=now;
+  const active=renderer.xr.isPresenting && vrPosIdx===ROOM_IDX && !vrStartActive;
+  if(!active){ joyReset(); return; }
+  const sq={};                                              // estado del agarre por mano
+  for(const src of xs.inputSources){ const gp=src.gamepad; if(gp&&src.handedness) sq[src.handedness]=!!(gp.buttons[1]&&gp.buttons[1].pressed); }
+  joyNear.left=joyNear.right=false;
+  const pos={};
+  for(const g of vrGrips){
+    const h=g.userData.hand; if(!g.userData.on||!h) continue;
+    g.getWorldPosition(_jv); pos[h]=_jv.clone();
+    g.userData.mesh.visible=true;
+  }
+  for(const s of joySticks){
+    s.cap.getWorldPosition(_jk);
+    if(s.holder&&!sq[s.holder]) s.holder=null;              // soltó el agarre
+    if(!s.holder){
+      for(const h of ['left','right']){
+        if(!pos[h]||!sq[h]) continue;
+        if(joySticks.some(o=>o.holder===h)) continue;       // una mano toma una sola palanca
+        if(pos[h].distanceTo(_jk)<JOY.GRAB){ s.holder=h; break; }
+      }
+    }
+    for(const h of ['left','right']) if(pos[h]&&pos[h].distanceTo(_jk)<JOY.GRAB) joyNear[h]=true;
+    const k=1-Math.exp(-dt/(s.holder?0.03:0.07));
+    if(s.holder){
+      const d=pos[s.holder].clone().sub(s.P), up=Math.max(0.02,d.y);
+      let ax=Math.atan2(d.x,up), az=Math.atan2(-d.z,up), m=Math.hypot(ax,az);
+      if(m>JOY.MAX){ ax*=JOY.MAX/m; az*=JOY.MAX/m; }
+      s.tx=ax; s.tz=az;
+    } else { s.tx=0; s.tz=0; }
+    s.cx=(s.cx||0)+(s.tx-(s.cx||0))*k; s.cz=(s.cz||0)+(s.tz-(s.cz||0))*k;
+    s.lever.rotation.set(-s.cz,0,-s.cx);
+    s.capMat.emissive.setHex(s.holder?0x1f6b2a:0x000000);
+  }
+  joySticks.forEach((s,i)=>{
+    let x=(s.cx||0)/JOY.MAX, y=(s.cz||0)/JOY.MAX, m=Math.hypot(x,y);
+    if(m<JOY.DZ){ x=y=0; } else { const f=(m-JOY.DZ)/(1-JOY.DZ)/m; x*=f; y*=f; }
+    joyOut[i].x=Math.max(-1,Math.min(1,x)); joyOut[i].y=Math.max(-1,Math.min(1,y));
+  });
+  for(const g of vrGrips){
+    const h=g.userData.hand, held=joySticks.some(s=>s.holder===h);
+    g.userData.mat.emissive.setHex(held?0x1f6b2a:(joyNear[h]?0x6b4a00:0x000000));
+  }
+}
 let monitorFrame=0, monitorTick=0;
 function updateControlRoomScreens(){
   // monitorCams[0] = grande (cenital): se refresca cada 2 cuadros; los 7 menores, 2 por cuadro en rotación.
@@ -1559,7 +1657,7 @@ function onVRStart(){
 }
 function onVREnd(){
   rig.position.set(0,0,0); rig.rotation.set(0,0,0); vrPanel.visible=false; sun.castShadow=true;
-  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false;
+  vrStartActive=false; vsMesh.visible=false; for(const c of vrCtrls) c.userData.ln.visible=false; joyReset();
   menuMusic=(ov.style.display==='flex'); musicSync();
   $('vrBtn').textContent='Entrar en VR'; resize();
   if(mode==='eval'&&!session.active&&!session.ended) evalIntro();
